@@ -1,3 +1,5 @@
+@use "_variables" as *;
+@use "_mixins" as *;
 
 * {
   font-family: sans-serif;
@@ -15,7 +17,7 @@ body {
 }
 
 iframe {
-  border: none;
+  border: 0;
   border-radius: 8px;
   min-width: 200px;
   width: 100%;
@@ -25,7 +27,7 @@ iframe {
 
 aside {
   width: 33vw;
-  margin: 0 .5em .5em 0;
+  margin: 0 0.5em 0.5em 0;
   height: calc(33vw * 0.5625);
 }
 
@@ -36,15 +38,17 @@ aside {
   display: flex;
   flex-direction: row;
   align-items: center;
-  margin-right: 0.5em;
+
+  @include margin-right(0.5em);
 
   .icon {
     height: 100%;
     padding: 0 18px 0 32px;
-    background: white;
+    background: #fff;
     display: flex;
     align-items: center;
-    margin-right: 0.5em;
+
+    @include margin-right(0.5em);
   }
 }
 
@@ -62,16 +66,16 @@ header {
   width: 100%;
   height: 3.2em;
   background-color: #F1680D;
-  color: white;
-  //background-image: url(../../assets/images/backdrop/network-o.png);
+  color: #fff;
   display: flex;
   flex-direction: row;
   align-items: center;
   margin-bottom: 1em;
-  box-shadow: 1px 0px 10px rgba(0,0,0,0.6);
+  box-shadow: 1px 0 10px rgba(0, 0, 0, 0.6);
   background-size: 50%;
   background-position: top left;
-  padding-right: 1em;
+
+  @include padding-right(1em);
 
   h1 {
     margin: 0;
@@ -87,13 +91,13 @@ header {
   display: flex;
   flex-wrap: wrap;
 
-  & > * {
+  > * {
     flex-grow: 0;
   }
 }
 
 fieldset {
-  border: none;
+  border: 0;
   min-width: 8em;
   legend {
     border-bottom: 1px solid #ccc;
@@ -103,12 +107,12 @@ fieldset {
 
 button {
   background: #F1680D;
-  color: white;
+  color: #fff;
   font-weight: bold;
   border-radius: 5px;
   margin: 0;
   padding: 1em 1.25em;
-  border: none;
+  border: 0;
 }
 
 a {
@@ -118,7 +122,11 @@ a {
     text-decoration: underline;
   }
 
-  &, &:hover, &:focus, &:visited, &:active {
+  &,
+  &:hover,
+  &:focus,
+  &:visited,
+  &:active {
     color: #F44336;
   }
 }

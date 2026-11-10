@@ -1,18 +1,22 @@
-@import '_variables';
-@import '_mixins';
+@use '_variables' as *;
+@use '_mixins' as *;
 
 .feed {
   width: 100%;
+  color: inherit;
+}
 
-  a {
-    color: black;
-    display: block;
+.feed-link {
+  color: pvar(--fg);
+  display: block;
+  min-width: 100px;
+
+  &:hover {
+    text-decoration: underline;
   }
 }
 
 my-global-icon {
-  cursor: pointer;
   width: 100%;
-
-  @include apply-svg-color(pvar(--mainForegroundColor))
+  height: 100%;
 }

@@ -1,10 +1,26 @@
-import { ViewportScroller } from '@angular/common'
-import truncate from 'lodash-es/truncate'
+import { CommonModule, NgTemplateOutlet, ViewportScroller } from '@angular/common'
+import {
+  booleanAttribute,
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  forwardRef,
+  inject,
+  input,
+  model,
+  OnDestroy,
+  OnInit,
+  viewChild
+} from '@angular/core'
+import { ControlValueAccessor, FormsModule, NG_VALUE_ACCESSOR } from '@angular/forms'
+import { SafeHtml } from '@angular/platform-browser'
+import { MarkdownService, ScreenService } from '@app/core'
+import { NgbCollapseModule } from '@ng-bootstrap/ng-bootstrap'
+import { Video } from '@peertube/peertube-models'
 import { Subject } from 'rxjs'
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators'
-import { Component, ElementRef, forwardRef, Input, OnInit, ViewChild } from '@angular/core'
-import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms'
-import { MarkdownService, ScreenService } from '@app/core'
+import { GlobalIconComponent } from '../shared-icons/global-icon.component'
+import { FormReactiveErrors } from './form-reactive.service'
 
 @Component({
   selector: 'my-markdown-textarea',
@@ -16,54 +32,83 @@ import { MarkdownService, ScreenService } from '@app/core'
       useExisting: forwardRef(() => MarkdownTextareaComponent),
       multi: true
     }
+  ],
+  changeDetection: ChangeDetectionStrategy.Eager,
+  imports: [
+    CommonModule,
+    FormsModule,
+    NgbCollapseModule,
+    NgTemplateOutlet,
+    GlobalIconComponent
   ]
 })
+export class MarkdownTextareaComponent implements ControlValueAccessor, OnInit, OnDestroy {
+  private viewportScroller = inject(ViewportScroller)
+  private screenService = inject(ScreenService)
+  private markdownService = inject(MarkdownService)
 
-export class MarkdownTextareaComponent implements ControlValueAccessor, OnInit {
-  @Input() content = ''
-  @Input() classes: string[] | { [klass: string]: any[] | any } = []
-  @Input() textareaMaxWidth = '100%'
-  @Input() textareaHeight = '150px'
-  @Input() truncate: number
-  @Input() markdownType: 'text' | 'enhanced' = 'text'
-  @Input() markdownVideo = false
-  @Input() name = 'description'
+  readonly previewEl = viewChild<ElementRef<HTMLElement>>('previewEl')
 
-  @ViewChild('textarea') textareaElement: ElementRef
+  readonly content = model('')
 
-  truncatedPreviewHTML = ''
-  previewHTML = ''
-  isMaximized = false
+  readonly formError = input<string | FormReactiveErrors | FormReactiveErrors[]>(undefined)
 
-  maximizeInText = $localize`Maximize editor`
-  maximizeOutText = $localize`Exit maximized editor`
+  readonly markdownType = input<'text' | 'enhanced' | 'to-unsafe-html'>('text')
+  readonly customMarkdownRenderer = input<(text: string) => Promise<string | HTMLElement>>(undefined)
+
+  readonly debounceTime = input(150)
+
+  readonly markdownVideo = input<Pick<Video, 'shortUUID'>>(undefined)
+
+  readonly inputId = input.required<string>()
+
+  readonly dir = input<string>(undefined)
+
+  readonly withPreview = input(true, { transform: booleanAttribute })
+  readonly withHtml = input(false, { transform: booleanAttribute })
+  readonly withEmoji = input(false, { transform: booleanAttribute })
+  readonly withShowMoreButton = input(false, { transform: booleanAttribute })
+
+  readonly monospace = input(false, { transform: booleanAttribute })
+
+  readonly textareaElement = viewChild<ElementRef>('textarea')
+  readonly previewElement = viewChild<ElementRef>('previewElement')
+
+  previewHTML: SafeHtml | string = ''
+
+  maximized = false
+  disabled = false
+  previewCollapsed = true
+  truncated = false
 
   private contentChanged = new Subject<string>()
   private scrollPosition: [number, number]
 
-  constructor (
-    private viewportScroller: ViewportScroller,
-    private screenService: ScreenService,
-    private markdownService: MarkdownService
-  ) { }
-
   ngOnInit () {
     this.contentChanged
-        .pipe(
-          debounceTime(150),
-          distinctUntilChanged()
-        )
-        .subscribe(() => this.updatePreviews())
+      .pipe(
+        debounceTime(this.debounceTime()),
+        distinctUntilChanged()
+      )
+      .subscribe(() => this.updatePreviews())
 
-    this.contentChanged.next(this.content)
+    this.contentChanged.next(this.content())
+
+    this.truncated = this.withShowMoreButton()
   }
 
-  propagateChange = (_: any) => { /* empty */ }
+  ngOnDestroy () {
+    this.unlockBodyScroll()
+  }
+
+  propagateChange = (_: any) => {
+    // empty
+  }
 
   writeValue (description: string) {
-    this.content = description
+    this.content.set(description)
 
-    this.contentChanged.next(this.content)
+    this.contentChanged.next(this.content())
   }
 
   registerOnChange (fn: (_: any) => void) {
@@ -75,26 +120,40 @@ export class MarkdownTextareaComponent implements ControlValueAccessor, OnInit {
   }
 
   onModelChange () {
-    this.propagateChange(this.content)
+    const content = this.content()
+    this.propagateChange(content)
 
-    this.contentChanged.next(this.content)
+    this.contentChanged.next(content)
   }
 
   onMaximizeClick () {
-    this.isMaximized = !this.isMaximized
+    if (this.disabled) return
+
+    this.maximized = !this.maximized
 
     // Make sure textarea have the focus
     // Except on touchscreens devices, the virtual keyboard may move up and hide the textarea in maximized mode
     if (!this.screenService.isInTouchScreen()) {
-      this.textareaElement.nativeElement.focus()
+      this.textareaElement().nativeElement.focus()
     }
 
     // Make sure the window has no scrollbars
-    if (!this.isMaximized) {
+    if (!this.maximized) {
       this.unlockBodyScroll()
     } else {
       this.lockBodyScroll()
     }
+  }
+
+  setDisabledState (isDisabled: boolean) {
+    this.disabled = isDisabled
+  }
+
+  hasEllipsis () {
+    const el = this.previewEl()?.nativeElement
+    if (!el) return false
+
+    return el.offsetHeight < el.scrollHeight
   }
 
   private lockBodyScroll () {
@@ -104,21 +163,53 @@ export class MarkdownTextareaComponent implements ControlValueAccessor, OnInit {
 
   private unlockBodyScroll () {
     document.getElementById('content').classList.remove('lock-scroll')
-    this.viewportScroller.scrollToPosition(this.scrollPosition)
+
+    if (this.scrollPosition) {
+      this.viewportScroller.scrollToPosition(this.scrollPosition)
+    }
   }
 
   private async updatePreviews () {
-    if (this.content === null || this.content === undefined) return
+    const content = this.content()
+    if (content === null || content === undefined) return
 
-    this.truncatedPreviewHTML = await this.markdownRender(truncate(this.content, { length: this.truncate }))
-    this.previewHTML = await this.markdownRender(this.content)
+    this.previewHTML = await this.markdownRender(content)
   }
 
   private async markdownRender (text: string) {
-    const html = this.markdownType === 'text' ?
-      await this.markdownService.textMarkdownToHTML(text) :
-      await this.markdownService.enhancedMarkdownToHTML(text)
+    let html: string
 
-    return this.markdownVideo ? this.markdownService.processVideoTimestamps(html) : html
+    const customMarkdownRenderer = this.customMarkdownRenderer()
+    const markdownType = this.markdownType()
+    if (customMarkdownRenderer) {
+      const result = await customMarkdownRenderer(text)
+
+      if (result instanceof HTMLElement) {
+        setTimeout(() => {
+          const wrapperElement = this.previewElement()?.nativeElement as HTMLElement
+          if (!wrapperElement) return
+
+          wrapperElement.innerHTML = ''
+          wrapperElement.appendChild(result)
+        })
+
+        return
+      }
+
+      html = result
+    } else if (markdownType === 'text') {
+      html = await this.markdownService.textMarkdownToHTML({ markdown: text, withEmoji: this.withEmoji(), withHtml: this.withHtml() })
+    } else if (markdownType === 'enhanced') {
+      html = await this.markdownService.enhancedMarkdownToHTML({ markdown: text, withEmoji: this.withEmoji(), withHtml: this.withHtml() })
+    } else if (markdownType === 'to-unsafe-html') {
+      html = await this.markdownService.markdownToUnsafeHTML({ markdown: text })
+    }
+
+    const markdownVideo = this.markdownVideo()
+    if (markdownVideo) {
+      html = this.markdownService.processVideoTimestamps(markdownVideo.shortUUID, html)
+    }
+
+    return html
   }
 }
